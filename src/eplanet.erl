@@ -50,6 +50,9 @@
 	 ]).
 
 -export([location/0,
+	 get_time_zone/0,
+	 search_time_zone/2,
+	 location_from_zone_tab/1,
 	 day/0,
 	 azimuthal_coordinates/2
 	]).
@@ -155,16 +158,19 @@
 		   f=(F)/?DAYS_PER_CENTURIES
 		 }).
 
-location() -> %% a place in sweden and time offset
-    Latitude  = 59.320787,  %% 59 19' 14.8'' N
-    Longitude = 18.367160,  %% 18 22' 01.8'' E
+location() ->
     Offs = calendar:datetime_to_gregorian_seconds(calendar:local_time()) - 
 	calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
-    {Longitude, Latitude, Offs / ?SECONDS_PER_HOUR}.
+    case get_time_zone() of
+	{ok, TimeZone} ->
+	    case location_from_zone_tab(TimeZone) of
+		{ok,{_CountryCodes,{Latitude,Longitude},_TZ}} ->
+		    {Latitude, Longitude, Offs / ?SECONDS_PER_HOUR}
+	    end
+    end.
 
 day() -> %% now
     {date(), time()}.
-
 
 %% Long = longitude_to_deg({1,55,0,1}).
 %% -1.9166666666666665
@@ -686,16 +692,20 @@ atand(X) ->    ?RADDEG*math:atan(X).
 %% fixme: allow various formats
 
 %% 0 = east, 1 = west, convert longitude to degree (0..
-longitude_to_deg({Deg,Min,Sec,W}) when W =:= 1; W =:= $W ->  %% West = 1
+longitude_to_deg({Deg,Min,Sec,W}) when 
+      W =:= 1; W =:= $W; W =:= $- ->  %% West = 1
     -deg_to_decimal(Deg,Min,Sec);
-longitude_to_deg({Deg,Min,Sec,W}) when W =:= 0; W =:= $E ->  %% East = 0
+longitude_to_deg({Deg,Min,Sec,W}) 
+  when W =:= 0; W =:= $E; W =:= $+ ->  %% East = 0
     deg_to_decimal(Deg,Min,Sec);
 longitude_to_deg(Deg) when is_number(Deg) ->
     Deg.
 
-latitude_to_deg({Deg,Min,Sec,S}) when S =:= 1; S =:= $S ->  %% South = 1
+latitude_to_deg({Deg,Min,Sec,S}) 
+  when S =:= 1; S =:= $S; S =:= $- ->  %% South = 1
     -deg_to_decimal(Deg,Min,Sec);
-latitude_to_deg({Deg,Min,Sec,S}) when S =:= 0; S =:= $N ->  %% North = 0
+latitude_to_deg({Deg,Min,Sec,S}) 
+  when S =:= 0; S =:= $N; S =:= $+ ->  %% North = 0
     deg_to_decimal(Deg,Min,Sec);
 latitude_to_deg(Deg) when is_number(Deg) ->
     Deg.
@@ -727,3 +737,117 @@ cbrt(X) when X < 0 ->
 cbrt(_X) ->
     0.0.
 -endif.
+
+get_time_zone() ->
+    case file:read_file("/etc/timezone") of
+	{error, enoent} ->
+	    case file:read_link("/etc/localtime") of
+		{ok,"/usr/share/zoneinfo/"++Zone} ->
+		    {ok,Zone};
+		{error,enoent} ->
+		    {error,enoent};
+		{error,einval} ->
+		    case file:read_file("/etc/localtime") of
+			{ok,ZoneInfo} ->
+			    MD5 = erlang:md5(ZoneInfo),
+			    search_time_zone("/usr/share/zoneinfo", MD5);
+			Error ->
+			    Error
+		    end
+	    end;
+	{ok,BinZone} -> {ok, binary_to_list(BinZone)}
+    end.
+
+search_time_zone(Dir, MD5) ->
+    try
+	filelib:fold_files(Dir, ".*", true, 
+			   fun(File,Acc) ->
+				   case file:read_file(File) of
+				       {ok,ZoneInfo} ->
+					   case erlang:md5(ZoneInfo) of
+					       MD5 -> throw(File);
+					       _ -> Acc
+					   end;
+				       _ -> Acc
+				   end
+			   end, {error,enoent}) of
+	Error -> Error
+    catch
+	throw:"/usr/share/zoneinfo/"++File ->
+	    {ok,File}
+    end.
+
+
+location_from_zone_tab(TimeZone) ->
+    case file:open(filename:join(code:priv_dir(?MODULE),"zone1970.tab"),
+		   [raw,read,binary]) of
+	{ok,Fd} ->
+	    try location_from_zone_fd(Fd,TimeZone) of
+		Zone -> Zone
+	    after
+		file:close(Fd)
+	    end;
+	Error ->
+	    Error
+    end.
+
+location_from_zone_fd(Fd, TimeZone) ->
+    case file:read_line(Fd) of
+	{ok, <<$#,_/binary>>} ->
+	    location_from_zone_fd(Fd, TimeZone);
+	{ok, Data} ->
+	    case binary:split(Data, <<"\t">>, [global]) of
+		[Codes,Coord,TZ | _Comments] ->
+		    case match_tz(TimeZone, trim(binary_to_list(TZ))) of
+			true ->
+			    {ok, {binary:split(Codes, <<"\t">>, [global]),
+				  coord_to_lat_long(Coord),TZ}};
+			false ->
+			    location_from_zone_fd(Fd, TimeZone)
+		    end;
+		_ ->
+		    location_from_zone_fd(Fd, TimeZone)
+	    end;
+	eof ->
+	    {error,not_found}
+    end.
+
+coord_to_lat_long(<<S1,D11,D12,M11,M12,
+		    S2,D21,D22,D23,M21,M22>>) when 
+      (S1 =:= $+ orelse S1 =:= $-),
+      (S2 =:= $+ orelse S2 =:= $-) ->
+    Lat = latitude_to_deg({list_to_integer([D11,D12]),
+			   list_to_integer([M11,M12]),0,S1}),
+    Long = longitude_to_deg({list_to_integer([D21,D22,D23]),
+			     list_to_integer([M21,M22]),0,S2}),
+    {Lat,Long};
+coord_to_lat_long(<<S1,D11,D12,M11,M12,S11,S12,
+		    S2,D21,D22,D23,M21,M22,S21,S22>>) ->
+    Lat = latitude_to_deg({list_to_integer([D11,D12]),
+			   list_to_integer([M11,M12]),
+			   list_to_integer([S11,S12]),S1}),
+    Long = longitude_to_deg({list_to_integer([D21,D22,D23]),
+			     list_to_integer([M21,M22]),
+			     list_to_integer([S21,S22]),S2}),
+    {Lat,Long}.
+
+trim(Cs) ->
+    lists:reverse(trim_(lists:reverse(trim_(Cs)))).
+
+trim_([$\s|Cs]) -> trim_(Cs);
+trim_([$\t|Cs]) -> trim_(Cs);
+trim_([$\n|Cs]) -> trim_(Cs);
+trim_([$\r|Cs]) -> trim_(Cs);
+trim_(Cs) -> Cs.
+
+match_tz(TZ, TZ) ->
+    true;
+match_tz(TZ1, TZ2) ->
+    case {string:to_lower(TZ1),string:to_lower(TZ2)} of
+	{TZ,TZ} -> true;
+	{TZ1L,TZ2L} ->
+	    case string:tokens(TZ2L, "/") of
+		[_, TZ1L] -> true;
+		_ -> false
+	    end
+    end.

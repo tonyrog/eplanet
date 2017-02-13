@@ -21,6 +21,9 @@
 	  background,
 	  pixmap  :: #epx_pixmap{},
 	  planets :: #{ atom() => #epx_pixmap{} },
+	  longitude = 0,
+	  latitude = 0,
+	  tz_hour_offset = 0.0,
 	  font    :: #epx_font{},
 	  width,
 	  height,
@@ -57,10 +60,14 @@ draw_init_(Width, Height, DateTime) ->
     {ok,Font} = epx_font:match([{name,"Arial"},{size,12}]),
     Day = eplanet:j2000_days(DateTime),
     Planets = load_planets(),
+    {Longitude,Latitude,TZ_Hour_Offset} = eplanet:location(),
     S0 = #s{ window = Win,
 	     background = Bg,
 	     pixmap = Pixmap,
 	     planets = Planets,
+	     longitude = Longitude,
+	     latitude = Latitude,
+	     tz_hour_offset = TZ_Hour_Offset,
 	     font = Font,
 	     width = Width,
 	     height = Height },
@@ -165,18 +172,17 @@ draw_center(Pixmap, Day, S) ->
 %%    X = -R,
 %%    Y = -R,
 %%    epx_view:draw_ellipse(Pixmap, X, Y, 2*R, 2*R),
-    draw_time_angle(S#s.center, Pixmap, 0, 0, R, Day).
+    draw_time_angle(S#s.center, Pixmap, 0, 0, R, Day, S).
 
 %% try draw a time at our position
-draw_time_angle(earth, Pixmap, X, Y, R, Day) ->
-    {Longitude,_,_} = eplanet:location(),
-    HA = eplanet:local_sidereal_time(Day, Longitude),
+draw_time_angle(earth, Pixmap, X, Y, R, Day, S) ->
+    HA = eplanet:local_sidereal_time(Day, S#s.longitude),
     epx_view:moveto(Pixmap, X-R, Y-R),
     epx_view:turnto(Pixmap, HA+180),
     epx_view:move(Pixmap, R),
     epx_gc:set_foreground_color(white),
     epx_view:line(Pixmap, 2);
-draw_time_angle(_, _Pixmap, _X, _Y, _R, _Day) -> 
+draw_time_angle(_, _Pixmap, _X, _Y, _R, _Day,_S) -> 
     ok.
 	    
 draw_planet(Pixmap, Body, Day, S) ->
@@ -187,7 +193,7 @@ draw_planet(Pixmap, Body, Day, S) ->
 	end,
     %% R=draw_ellipse_planet(Pixmap, Body, X0, Y0, S),
     R = draw_planet_(Pixmap, Body, X0, Y0, S),
-    draw_time_angle(Body, Pixmap, X0, Y0, R, Day).
+    draw_time_angle(Body, Pixmap, X0, Y0, R, Day, S).
 
 
 draw_planet_(Pixmap, Body, X0, Y0, S) ->
