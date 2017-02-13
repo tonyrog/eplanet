@@ -40,7 +40,7 @@
 
 start() ->
     DateTime = {date(), time()},
-    start(500, 500, DateTime).
+    start(1024, 576, DateTime).
 
 start(Width, Height, DateTime) ->
     application:start(epx),
@@ -116,6 +116,12 @@ draw_loop(Win, Day, S) ->
 	{epx_event, Win, {key_press,down,_,_}} ->
 	    TicksPerSeconds = max(1, S#s.ticks_per_seconds - 1),
 	    S1 = timeout(S#s { ticks_per_seconds = TicksPerSeconds }),
+	    draw_loop(Win, Day, S1);
+	{epx_event, Win, {key_press,$D,_,_}} ->
+	    S1 = S#s { days_per_tick = 1 },
+	    draw_loop(Win, Day, S1);
+	{epx_event, Win, {key_press,$H,_,_}} ->
+	    S1 = S#s { days_per_tick = 1/48 },
 	    draw_loop(Win, Day, S1);
 	Other ->
 	    io:format("got: ~p\n", [Other]),
