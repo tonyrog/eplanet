@@ -1,7 +1,7 @@
 {application, eplanet,
  [
   {description, "Planetary positions"},
-  {vsn, "1"},
+  {vsn, git},
   {registered, []},
   {applications, [
                   kernel,
