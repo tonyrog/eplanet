@@ -1,0 +1,12 @@
+{application, eplanet,
+ [
+  {description, "Planetary positions"},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { eplanet_app, []}},
+  {env, []}
+ ]}.
