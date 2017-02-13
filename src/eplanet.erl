@@ -755,7 +755,8 @@ get_time_zone() ->
 			    Error
 		    end
 	    end;
-	{ok,BinZone} -> {ok, binary_to_list(BinZone)}
+	{ok,BinZone} -> 
+	    {ok,trim(binary_to_list(BinZone))}
     end.
 
 search_time_zone(Dir, MD5) ->
