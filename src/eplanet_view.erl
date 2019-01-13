@@ -43,7 +43,7 @@ start() ->
     start(1024, 576, DateTime).
 
 start(Width, Height, DateTime) ->
-    application:start(epx),
+    application:ensure_all_started(epx),
     spawn(fun() -> draw_init_(Width, Height, DateTime) end).
 
 draw_init_(Width, Height, DateTime) ->

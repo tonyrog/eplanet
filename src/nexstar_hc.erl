@@ -1,11 +1,11 @@
 %%% @author Tony Rogvall <tony@rogvall.se>
 %%% @copyright (C) 2014, Tony Rogvall
 %%% @doc
-%%%    NexStar communication protocol
+%%%    NexStar communication protocol (Hand control)
 %%% @end
 %%% Created : 27 Oct 2014 by Tony Rogvall <tony@rogvall.se>
 
--module(nexstar).
+-module(nexstar_hc).
 
 -compile(export_all).
 
@@ -41,8 +41,8 @@
 
 -type nexstar() :: #nexstar{}.
 
+-include("nexstar.hrl").
 
-%% setup with  9600 baud
 open(Dev) ->
     case uart:open(Dev, [{baud,9600},{stopb,1},{parity,none},
 			 {mode,binary},{packet,0}]) of
@@ -165,48 +165,48 @@ cancel_goto(Nexstar) ->
     end.
 
 set_fixed_slew(Nexstar,azm,Rate) when is_integer(Rate), Rate >= 0, Rate < 10 ->
-    case command(Nexstar, <<$P,2,16,36,Rate,0,0,0>>, 0) of
+    case command(Nexstar, <<$P,2,?AZM,36,Rate,0,0,0>>, 0) of
 	{ok, <<>>} -> ok;
 	_ -> error
     end;
 set_fixed_slew(Nexstar,azm,Rate) when is_integer(Rate), Rate < 0, Rate > -10 ->
-    case command(Nexstar, <<$P,2,16,37,(-Rate),0,0,0>>, 0) of
+    case command(Nexstar, <<$P,2,?AZM,37,(-Rate),0,0,0>>, 0) of
 	{ok, <<>>} -> ok;
 	_ -> error
     end;
 set_fixed_slew(Nexstar,alt,Rate) when is_integer(Rate), Rate >= 0, Rate < 10 ->
-    case command(Nexstar, <<$P,2,17,36,Rate,0,0,0>>, 0) of
+    case command(Nexstar, <<$P,2,?ALT,36,Rate,0,0,0>>, 0) of
 	{ok, <<>>} -> ok;
 	_ -> error
     end;
 set_fixed_slew(Nexstar,alt,Rate) when is_integer(Rate), Rate < 0, Rate > -10 ->
-    case command(Nexstar, <<$P,2,17,37,(-Rate),0,0,0>>, 0) of
+    case command(Nexstar, <<$P,2,?ALT,37,(-Rate),0,0,0>>, 0) of
 	{ok, <<>>} -> ok;
 	_ -> error
     end.
 
 set_slew(Nexstar,azm,Rate) when is_number(Rate),Rate >= 0,Rate < 16384 ->
     R = trunc(Rate*4),
-    case command(Nexstar,<<$P,3,16,6,R:16,0,0>>) of
+    case command(Nexstar,<<$P,3,?AZM,6,R:16,0,0>>) of
 	{ok, <<>>} -> ok;
 	_ -> error
     end;
 set_slew(Nexstar,azm,Rate) when is_number(Rate),Rate<0,Rate >= -16384 ->
     R = trunc(-Rate*4),
-    case command(Nexstar,<<$P,3,16,7,R:16,0,0>>) of
+    case command(Nexstar,<<$P,3,?AZM,7,R:16,0,0>>) of
 	{ok, <<>>} -> ok;
 	_ -> error
     end;
 
 set_slew(Nexstar,alt,Rate) when is_number(Rate),Rate >= 0,Rate < 16384 ->
     R = trunc(Rate*4),
-    case command(Nexstar,<<$P,3,17,6,R:16,0,0>>) of
+    case command(Nexstar,<<$P,3,?ALT,6,R:16,0,0>>) of
 	{ok, <<>>} -> ok;
 	_ -> error
     end;
 set_slew(Nexstar,alt,Rate) when is_number(Rate),Rate<0,Rate >= -16384 ->
     R = trunc(-Rate*4),
-    case command(Nexstar,<<$P,3,17,7,R:16,0,0>>) of
+    case command(Nexstar,<<$P,3,?ALT,7,R:16,0,0>>) of
 	{ok, <<>>} -> ok;
 	_ -> error
     end.
@@ -299,7 +299,7 @@ get_zone_offset() ->
 -spec gps_is_linked(N::nexstar()) -> boolean() | error.
 gps_is_linked(N) ->
     if N#nexstar.version >= {1,6} ->
-	    {ok,<<X>>} = command(N, <<$P,1,176,55,0,0,0,1>>, 1),
+	    {ok,<<X>>} = command(N, <<$P,1,?GPS,55,0,0,0,1>>, 1),
 	    X > 0;
        true ->
 	    error
@@ -307,7 +307,7 @@ gps_is_linked(N) ->
 
 gps_get_latitude(N) ->
     if N#nexstar.version >= {1,6} ->
-	    {ok,<<X,Y,Z>>} = command(N, <<$P,1,176,1,0,0,0,3>>, 3),
+	    {ok,<<X,Y,Z>>} = command(N, <<$P,1,?GPS,1,0,0,0,3>>, 3),
 	    {ok, (X*65536+Y*256+Z) / (1 bsl 24)};
        true ->
 	    error
@@ -315,7 +315,7 @@ gps_get_latitude(N) ->
 
 gps_get_longitude(N) ->
     if N#nexstar.version >= {1,6} ->
-	    {ok,<<X,Y,Z>>} = command(N, <<$P,1,176,2,0,0,0,3>>, 3),
+	    {ok,<<X,Y,Z>>} = command(N, <<$P,1,?GPS,2,0,0,0,3>>, 3),
 	    {ok, (X*65536+Y*256+Z) / (1 bsl 24)};
        true ->
 	    error
@@ -329,7 +329,7 @@ gps_get_date(N) ->
 
 gps_get_date_(N) ->
     if N#nexstar.version >= {1,6} ->
-	    {ok,<<X,Y>>} = command(N, <<$P,1,176,3,0,0,0,2>>, 2),
+	    {ok,<<X,Y>>} = command(N, <<$P,1,?GPS,3,0,0,0,2>>, 2),
 	    {ok, {X,Y}};
        true ->
 	    error
@@ -337,7 +337,7 @@ gps_get_date_(N) ->
 
 gps_get_year_(N) ->
     if N#nexstar.version >= {1,6} ->
-	    {ok,<<X,Y>>} = command(N, <<$P,1,176,4,0,0,0,2>>, 2),
+	    {ok,<<X,Y>>} = command(N, <<$P,1,?GPS,4,0,0,0,2>>, 2),
 	    {ok, X*256+Y};
        true ->
 	    error
@@ -345,7 +345,7 @@ gps_get_year_(N) ->
 
 gps_get_time(N) ->
     if N#nexstar.version >= {1,6} ->
-	    {ok,<<X,Y,Z>>} = command(N, <<$P,1,176,51,0,0,0,3>>, 3),
+	    {ok,<<X,Y,Z>>} = command(N, <<$P,1,?GPS,51,0,0,0,3>>, 3),
 	    {ok, {X,Y,Z}};
        true ->
 	    error
@@ -369,18 +369,17 @@ rtc_get_time(N) ->
 %% {ok,<<X,Y>>}
 %% X is month 1-12, Y is day 1-31
 rtc_get_date_(Nexstar) ->
-    command_(Nexstar#nexstar.uart, <<$P,1,178,3,0,0,0,2>>, 2).
+    command_(Nexstar#nexstar.uart, <<$P,1,?RTC,3,0,0,0,2>>, 2).
 
 -spec rtc_get_year_(nexstar()) -> {ok,binary()} | error.
 %% Year = X*256 + Y
 rtc_get_year_(Nexstar) ->
-    command_(Nexstar#nexstar.uart, <<$P,1,178,4,0,0,0,2>>, 2).
+    command_(Nexstar#nexstar.uart, <<$P,1,?RTC,4,0,0,0,2>>, 2).
 
 -spec rtc_get_time_(nexstar()) -> {ok,binary()} | error.
 %% {ok,<<X,Y,Z>>} where X is hour, Y is minutes, Z is seconds
 rtc_get_time_(Nexstar) ->
-    command_(Nexstar#nexstar.uart, <<$P,1,178,51,0,0,0,3>>, 3).
-
+    command_(Nexstar#nexstar.uart, <<$P,1,?RTC,51,0,0,0,3>>, 3).
 
 command(Nexstar, Command) ->
     command_(Nexstar#nexstar.uart, Command, 0).
