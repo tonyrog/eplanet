@@ -27,6 +27,7 @@
 	 obliquity_of_the_ecliptic/1,
 
 	 orbit/2,
+	 orbit_1/1, orbit_2/1, %% debug
 	 orbital_period/2,
 	 mean_distance/2,
 	 eccentricity/2,
@@ -57,9 +58,8 @@
 	 azimuthal_coordinates/2
 	]).
 
--define(PI, 3.14159265358979323846).
--define(RADDEG, (180.0/?PI)).
--define(DEGRAD, (?PI/180.0)).
+-define(RADDEG, (180.0/(math:pi()))).
+-define(DEGRAD, ((math:pi())/180.0)).
 -define(SECONDS_PER_HOUR, 3600).
 -define(SECONDS_PER_DAY, 86400).     %% 60*60*24
 -define(DAYS_PER_CENTURIES, 36525.0).  %% 365*100 + 25
@@ -187,21 +187,25 @@ j2000_days(Days) when is_number(Days) -> %% assume already converted
     Days;
 j2000_days({Days,Time}) when is_number(Days), is_number(Time) ->
     Days + Time;
-j2000_days(Date={YYYY,MM,DD}) %% from date
-  when is_integer(YYYY), YYYY >= 0, YYYY =< 9999,
-       is_integer(MM), MM >= 1, MM =< 12,
-       is_integer(DD), DD >= 1, DD =< 31 ->
-    S0 = calendar:datetime_to_gregorian_seconds({Date,{0,0,0}}),
-    (S0 - ?J2000_SECONDS) / ?SECONDS_PER_DAY;
-j2000_days(DateTime={{YYYY,MM,DD},{H,M,S}}) 
-  when is_integer(YYYY), YYYY >= 0, YYYY =< 9999,
+j2000_days(Date={_YYYY,_MM,_DD}) -> 
+    (gregorian_seconds(Date,{0,0,0}) - ?J2000_SECONDS) / ?SECONDS_PER_DAY;
+j2000_days({Date={_YYYY,_MM,_DD},Time={_H,_M,_S}}) ->
+    (gregorian_seconds(Date,Time) - ?J2000_SECONDS) / ?SECONDS_PER_DAY.
+
+gregorian_seconds({YYYY,MM,DD},Time={H,M,S})
+  when is_integer(YYYY), YYYY >= -3000, YYYY =< 3000,
        is_integer(MM), MM >= 1, MM =< 12,
        is_integer(DD), DD >= 1, DD =< 31,
        is_integer(H), H >= 0, H =< 23,
        is_integer(M), M >= 0, H =< 59,
        is_integer(S), S >= 0, S =< 59 ->
-    S0 = calendar:datetime_to_gregorian_seconds(DateTime),
-    (S0 - ?J2000_SECONDS) / ?SECONDS_PER_DAY.
+    ?SECONDS_PER_DAY*date_to_gregorian_days(YYYY,MM,DD) +
+	calendar:time_to_seconds(Time).
+
+date_to_gregorian_days(YYYY,MM,DD) when YYYY >= 0 ->
+    calendar:date_to_gregorian_days(YYYY,MM,DD).
+%% FIXME BC!!
+
 
 j2000_to_gregorian_seconds(Days) ->
     trunc(Days*?SECONDS_PER_DAY + ?J2000_SECONDS).
